@@ -17,8 +17,6 @@ class ParserJson
     # temp variables
     temp_key = ''
     temp_value = ''
-    temp_array = []
-    temp_hase = {}
     temp_array_active = false
     temp_hash_active = false
     temp_number_active = false
