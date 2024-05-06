@@ -9,7 +9,7 @@ class ParserJson
     @json[key] = value
   end
 
-  def pa
+  def print_json
     puts @json
   end
 
@@ -18,14 +18,15 @@ class ParserJson
     temp_key = ''
     temp_value = ''
     temp_array = []
-    temp_hase = {}
+    temp_hash = {}
+    temp_object_key = ''
     temp_array_active = false
     temp_hash_active = false
     temp_number_active = false
 
     state = :q0
 
-    json.split(" ").join("").each_char do |char|
+    json.split(" ").join("").each_char.with_index do |char, index|
 
       case [state, char, @stack.last]
 
@@ -44,7 +45,11 @@ class ParserJson
       #  state = :q3
 
       in [:q3, /[a-zA-Z]/, _]
-        temp_key << char
+        if temp_hash_active
+          temp_object_key << char
+        else
+          temp_key << char
+        end
         state = :q3
 
       in [:q3, '"', 'i']
@@ -57,6 +62,8 @@ class ParserJson
 
       # object case
       in [:q5, '{', last]
+        temp_hash_active = true
+
         if last == 'e'
           @stack.pop
         end
@@ -66,14 +73,18 @@ class ParserJson
 
       in [:q6, '"', _]
         @stack.push('i')
-        state = :q2
+        state = :q3
 
       in [:q6, '}', 'o']
+        temp_hash_active = false
+
         @stack.pop
         state = :q20
 
       # array case
       in [:q5, '[', last]
+        temp_array_active = true
+
         if last == 'e'
           @stack.pop
         end
@@ -99,8 +110,15 @@ class ParserJson
         state = :q7
 
       in [:q7, '"', 's']
-        set_value(temp_key, temp_value)
-        temp_key = ''
+        if temp_array_active
+          temp_array.push(temp_value)
+        elsif temp_hash_active
+          temp_hash[temp_object_key] = temp_value
+          temp_object_key = ''
+        else
+          set_value(temp_key, temp_value)
+          temp_key = ''
+        end
         temp_value = ''
 
         @stack.pop
@@ -119,8 +137,15 @@ class ParserJson
         state = :q7
 
       in [:q8, '\'', 's']
-        set_value(temp_key, temp_value)
-        temp_key = ''
+        if temp_array_active
+          temp_array.push(temp_value)
+        elsif temp_hash_active
+          temp_hash[temp_object_key] = temp_value
+          temp_object_key = ''
+        else
+          set_value(temp_key, temp_value)
+          temp_key = ''
+        end
         temp_value = ''
 
         @stack.pop
@@ -146,7 +171,6 @@ class ParserJson
       in [:q19, '.', 'd']
         temp_value << char
 
-
         @stack.pop
         state = :q21
 
@@ -171,8 +195,15 @@ class ParserJson
         state = :q11
 
       in [:q11, 'e', 't']
-        set_value(temp_key, true)
-        temp_key = ''
+        if temp_array_active
+          temp_array.push(true)
+        elsif temp_hash_active
+          temp_hash[temp_object_key] = true
+          temp_object_key = ''
+        else
+          set_value(temp_key, true)
+          temp_key = ''
+        end
         temp_value = ''
 
         @stack.pop
@@ -196,8 +227,15 @@ class ParserJson
         state = :q15
 
       in [:q15, 'e', 'f']
-        set_value(temp_key, false)
-        temp_key = ''
+        if temp_array_active
+          temp_array.push(false)
+        elsif temp_hash_active
+          temp_hash[temp_object_key] = false
+          temp_object_key = ''
+        else
+          set_value(temp_key, false)
+          temp_key = ''
+        end
         temp_value = ''
 
         @stack.pop
@@ -218,8 +256,15 @@ class ParserJson
         state = :q18
 
       in [:q18, 'l', 'n']
-        set_value(temp_key, nil)
-        temp_key = ''
+        if temp_array_active
+          temp_array.push(nil)
+        elsif temp_hash_active
+          temp_hash[temp_object_key] = nil
+          temp_object_key = ''
+        else
+          set_value(temp_key, nil)
+          temp_key = ''
+        end
         temp_value = ''
 
         @stack.pop
@@ -235,14 +280,23 @@ class ParserJson
       in [:q19 | :q20, ',', last]
         if temp_number_active == true
           if last == 'd'
-            set_value(temp_key, temp_value.to_i)
+            number = temp_value.to_i
           else
-            set_value(temp_key, temp_value.to_f)
+            number = temp_value.to_f
           end
 
-          temp_number_active = false
-          temp_key = ''
+          if temp_array_active
+            temp_array.push(number)
+          elsif temp_hash_active
+            temp_hash[temp_object_key] = number
+            temp_object_key = ''
+          else
+            set_value(temp_key, number)
+            temp_key = ''
+          end
           temp_value = ''
+
+          temp_number_active = false
         end
 
         if last == 'd'
@@ -260,14 +314,20 @@ class ParserJson
       in [:q19 | :q20, ']', last]
         if temp_number_active == true
           if last == 'd'
-            set_value(temp_key, temp_value.to_i)
+            number = temp_value.to_i
           else
-            set_value(temp_key, temp_value.to_f)
+            number = temp_value.to_f
           end
 
-          temp_number_active = false
-          temp_key = ''
+          if temp_array_active
+            temp_array.push(number)
+          else
+            set_value(temp_key, number)
+            temp_key = ''
+          end
           temp_value = ''
+
+          temp_number_active = false
         end
 
         if last == 'd'
@@ -276,6 +336,11 @@ class ParserJson
         end
 
         if last == 'a'
+          set_value(temp_key, temp_array)
+            temp_array = []
+            temp_array_active = false
+            temp_key = ''
+
           @stack.pop
         end
 
@@ -284,14 +349,23 @@ class ParserJson
       in [:q19 | :q20, '}', last]
         if temp_number_active == true
           if last == 'd'
-            set_value(temp_key, temp_value.to_i)
+            number = temp_value.to_i
           else
-            set_value(temp_key, temp_value.to_f)
+            number = temp_value.to_f
           end
 
-          temp_number_active = false
-          temp_key = ''
+          if temp_array_active
+            temp_array.push(number)
+          elsif temp_hash_active
+            temp_hash[temp_object_key] = number
+            temp_object_key = ''
+          else
+            set_value(temp_key, number)
+            temp_key = ''
+          end
           temp_value = ''
+
+          temp_number_active = false
         end
 
         if last == 'd'
@@ -300,6 +374,9 @@ class ParserJson
         end
 
         if last == 'o'
+          set_value(temp_key, temp_hash)
+          temp_key = ''
+          temp_hash = {}
           @stack.pop
         elsif last == '$'
           state = :q22
@@ -309,11 +386,59 @@ class ParserJson
         state = :q20
 
       else
-        puts 'Error'
+        puts "Error - Json inválido"
+        puts "Indice da origem do erro: #{index}"
+        puts "Erro com base na pilha: '#{track_error(@stack.last)}'"
         break
       end
 
     end
 
+    if @stack.empty?
+      print_json
+    else
+      puts "Error - Json inválido"
+      puts "Erro com base na pilha: '#{track_error(@stack.last)}'"
+    end
+
+  end
+
+  def track_error(last)
+    error_message = ''
+
+    case [last]
+
+    in ['i']
+      error_message = "Estrutura ou nomeclatura do nome da key"
+
+    in ['e']
+      error_message = "Expectativa de entrada de algum valor"
+
+    in ['s']
+      error_message = "Estrtura ou nomeclatura da string"
+
+    in ['o']
+      error_message = "Estrutura do objeto"
+
+    in ['a']
+      error_message = "Estrutura do array"
+
+    in ['d']
+      error_message = "Estrtura do número"
+
+    in ['t']
+      error_message = "Estrutura ou nomeclatura do boolean true"
+
+    in ['f']
+      error_message = "Estrutura ou nomeclatura do boolean false"
+
+    in ['n']
+      error_message = "Estrutura ou nomeclatura do boolean null"
+
+    else
+      error_message = "Estrutura do Json"
+    end
+
+    return error_message
   end
 end
